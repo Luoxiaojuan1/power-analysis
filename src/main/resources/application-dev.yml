@@ -1,7 +1,7 @@
 spring:
   datasource:
     driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:power_analysis;DB_CLOSE_DELAY=-1;MODE=MySQL
+    url: jdbc:h2:mem:power_analysis;DB_CLOSE_DELAY=-1;MODE=MySQL;DATABASE_TO_UPPER=false
     username: sa
     password:
   h2:
@@ -13,3 +13,4 @@ spring:
       mode: always
       schema-locations: classpath:db/schema-h2.sql
       data-locations: classpath:db/data-h2.sql
+      encoding: UTF-8
