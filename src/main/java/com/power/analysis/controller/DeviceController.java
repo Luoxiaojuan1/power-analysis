@@ -39,13 +39,13 @@ public class DeviceController {
     }
 
     @ApiOperation("根据ID查询")
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<Device> getById(@PathVariable Long id) {
         return Result.success(deviceService.getById(id));
     }
 
     @ApiOperation("分页查询设备")
-    @GetMapping
+    @GetMapping("/list")
     public Result<PageResult<Device>> pageQuery(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String type,

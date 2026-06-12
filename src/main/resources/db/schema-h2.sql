@@ -1,0 +1,42 @@
+-- H2内存数据库建表脚本
+
+DROP TABLE IF EXISTS alarm_record;
+DROP TABLE IF EXISTS power_data;
+DROP TABLE IF EXISTS device;
+
+CREATE TABLE device (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(30) NOT NULL,
+    region VARCHAR(100),
+    status VARCHAR(20) NOT NULL DEFAULT 'ONLINE',
+    install_date TIMESTAMP,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE power_data (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    device_id BIGINT NOT NULL,
+    voltage DECIMAL(10,2),
+    current DECIMAL(10,2),
+    power DECIMAL(10,2),
+    energy DECIMAL(10,4),
+    power_factor DECIMAL(5,3),
+    collect_time TIMESTAMP NOT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE alarm_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    device_id BIGINT NOT NULL,
+    alarm_type VARCHAR(30) NOT NULL,
+    alarm_level VARCHAR(20) NOT NULL DEFAULT 'WARN',
+    content VARCHAR(500),
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);

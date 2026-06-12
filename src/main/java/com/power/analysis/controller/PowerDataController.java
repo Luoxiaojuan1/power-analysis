@@ -34,7 +34,7 @@ public class PowerDataController {
     }
 
     @ApiOperation("分页查询采集数据")
-    @GetMapping
+    @GetMapping("/list")
     public Result<PageResult<PowerData>> pageQuery(
             @RequestParam(required = false) Long deviceId,
             @RequestParam(required = false) String startTime,
@@ -45,7 +45,7 @@ public class PowerDataController {
     }
 
     @ApiOperation("根据ID查询")
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<PowerData> getById(@PathVariable Long id) {
         return Result.success(powerDataService.getById(id));
     }
