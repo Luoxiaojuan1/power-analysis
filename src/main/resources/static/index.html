@@ -32,6 +32,12 @@
         .status-online { color: #67C23A; }
         .status-offline { color: #F56C6C; }
         .status-maintenance { color: #E6A23C; }
+        .alarm-info { color: #409EFF; }
+        .alarm-warn { color: #E6A23C; }
+        .alarm-error { color: #F56C6C; }
+        .alarm-pending { color: #F56C6C; }
+        .alarm-processing { color: #E6A23C; }
+        .alarm-resolved { color: #67C23A; }
     </style>
 </head>
 <body>
@@ -45,6 +51,7 @@
             <el-menu-item index="powerdata"><el-icon><el-icon-lightning/></el-icon><span>电力数据</span></el-menu-item>
             <el-menu-item index="statistic"><el-icon><el-icon-pie-chart/></el-icon><span>统计分析</span></el-menu-item>
             <el-menu-item index="forecast"><el-icon><el-icon-trend-charts/></el-icon><span>负荷预测</span></el-menu-item>
+            <el-menu-item index="alarm"><el-icon><el-icon-bell/></el-icon><span>告警管理</span></el-menu-item>
         </el-menu>
     </div>
 
@@ -172,6 +179,58 @@
                 </div>
             </div>
 
+            <!-- ========== 告警管理 ========== -->
+            <div v-if="currentView === 'alarm'">
+                <div class="stat-cards">
+                    <div class="stat-card"><div class="label">待处理</div><div class="value red">{{ alarmStats.pending }}</div></div>
+                    <div class="stat-card"><div class="label">处理中</div><div class="value orange">{{ alarmStats.processing }}</div></div>
+                    <div class="stat-card"><div class="label">已解决</div><div class="value green">{{ alarmStats.resolved }}</div></div>
+                    <div class="stat-card"><div class="label">告警总数</div><div class="value blue">{{ alarmStats.total }}</div></div>
+                </div>
+                <div class="table-card">
+                    <div class="filter-bar">
+                        <el-select v-model="alarmFilter.deviceId" placeholder="选择设备" clearable style="width:160px" @change="loadAlarms">
+                            <el-option v-for="d in allDevices" :key="d.id" :label="d.name" :value="d.id"/>
+                        </el-select>
+                        <el-select v-model="alarmFilter.alarmType" placeholder="告警类型" clearable style="width:140px" @change="loadAlarms">
+                            <el-option label="过压" value="OVER_VOLTAGE"/><el-option label="欠压" value="UNDER_VOLTAGE"/>
+                            <el-option label="过流" value="OVER_CURRENT"/><el-option label="过载" value="OVER_LOAD"/>
+                            <el-option label="离线" value="OFFLINE"/>
+                        </el-select>
+                        <el-select v-model="alarmFilter.alarmLevel" placeholder="告警级别" clearable style="width:120px" @change="loadAlarms">
+                            <el-option label="提示" value="INFO"/><el-option label="警告" value="WARN"/><el-option label="严重" value="ERROR"/>
+                        </el-select>
+                        <el-select v-model="alarmFilter.status" placeholder="处理状态" clearable style="width:120px" @change="loadAlarms">
+                            <el-option label="待处理" value="PENDING"/><el-option label="处理中" value="PROCESSING"/><el-option label="已解决" value="RESOLVED"/>
+                        </el-select>
+                        <el-button type="primary" @click="loadAlarms">查询</el-button>
+                    </div>
+                    <el-table :data="alarmList" border stripe style="width:100%">
+                        <el-table-column prop="id" label="ID" width="70"/>
+                        <el-table-column prop="deviceId" label="设备ID" width="80"/>
+                        <el-table-column prop="alarmType" label="告警类型" width="120">
+                            <template #default="{row}">{{ {OVER_VOLTAGE:'过压',UNDER_VOLTAGE:'欠压',OVER_CURRENT:'过流',OVER_LOAD:'过载',OFFLINE:'离线'}[row.alarmType] }}</template>
+                        </el-table-column>
+                        <el-table-column prop="alarmLevel" label="级别" width="80">
+                            <template #default="{row}"><span :class="'alarm-'+row.alarmLevel.toLowerCase()">{{ {INFO:'提示',WARN:'警告',ERROR:'严重'}[row.alarmLevel] }}</span></template>
+                        </el-table-column>
+                        <el-table-column prop="content" label="告警内容" min-width="200"/>
+                        <el-table-column prop="status" label="状态" width="100">
+                            <template #default="{row}"><span :class="'alarm-'+row.status.toLowerCase()">{{ {PENDING:'待处理',PROCESSING:'处理中',RESOLVED:'已解决'}[row.status] }}</span></template>
+                        </el-table-column>
+                        <el-table-column prop="createTime" label="告警时间" width="180"/>
+                        <el-table-column label="操作" width="200">
+                            <template #default="{row}">
+                                <el-button v-if="row.status==='PENDING'" size="small" type="warning" @click="handleAlarm(row.id,'PROCESSING')">处理</el-button>
+                                <el-button v-if="row.status==='PROCESSING'" size="small" type="success" @click="handleAlarm(row.id,'RESOLVED')">解决</el-button>
+                                <el-button v-if="row.status==='RESOLVED'" size="small" type="info" disabled>已完成</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                    <el-pagination style="margin-top:15px;justify-content:flex-end" background layout="total, prev, pager, next" :total="alarmTotal" :page-size="alarmFilter.size" @current-change="v => { alarmFilter.page = v; loadAlarms() }"/>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -191,7 +250,7 @@ const app = createApp({
         setInterval(() => { currentTime.value = new Date().toLocaleString('zh-CN'); }, 1000);
 
         const pageTitle = computed(() => ({
-            dashboard: '仪表盘', device: '设备管理', powerdata: '电力数据', statistic: '统计分析', forecast: '负荷预测'
+            dashboard: '仪表盘', device: '设备管理', powerdata: '电力数据', statistic: '统计分析', forecast: '负荷预测', alarm: '告警管理'
         }[currentView.value]));
 
         // ---- 通用 ----
@@ -340,14 +399,56 @@ const app = createApp({
             } catch(e) {}
         };
 
-        onMounted(() => { loadAllDevices(); loadDevices(); loadPowerData(); loadDashboard(); });
+        // ---- 告警管理 ----
+        const alarmFilter = reactive({ deviceId: null, alarmType: '', alarmLevel: '', status: '', page: 1, size: 20 });
+        const alarmList = ref([]);
+        const alarmTotal = ref(0);
+        const alarmStats = reactive({ total: 0, pending: 0, processing: 0, resolved: 0 });
+
+        const loadAlarms = async () => {
+            const params = { page: alarmFilter.page, size: alarmFilter.size };
+            if (alarmFilter.deviceId) params.deviceId = alarmFilter.deviceId;
+            if (alarmFilter.alarmType) params.alarmType = alarmFilter.alarmType;
+            if (alarmFilter.alarmLevel) params.alarmLevel = alarmFilter.alarmLevel;
+            if (alarmFilter.status) params.status = alarmFilter.status;
+            const { data } = await axios.get(BASE + '/alarm/list', { params });
+            if (data.code === 200) {
+                alarmList.value = data.data.records;
+                alarmTotal.value = data.data.total;
+            }
+            // 加载告警统计
+            const statsPromises = [
+                axios.get(BASE + '/alarm/list', { params: { page: 1, size: 1 } }),
+                axios.get(BASE + '/alarm/list', { params: { status: 'PENDING', page: 1, size: 1 } }),
+                axios.get(BASE + '/alarm/list', { params: { status: 'PROCESSING', page: 1, size: 1 } }),
+                axios.get(BASE + '/alarm/list', { params: { status: 'RESOLVED', page: 1, size: 1 } })
+            ];
+            const [r1, r2, r3, r4] = await Promise.all(statsPromises);
+            if (r1.data.code === 200) alarmStats.total = r1.data.data.total;
+            if (r2.data.code === 200) alarmStats.pending = r2.data.data.total;
+            if (r3.data.code === 200) alarmStats.processing = r3.data.data.total;
+            if (r4.data.code === 200) alarmStats.resolved = r4.data.data.total;
+        };
+
+        const handleAlarm = async (id, status) => {
+            try {
+                const { data } = await axios.put(BASE + '/alarm/' + id + '/status?status=' + status);
+                if (data.code === 200) {
+                    ElementPlus.ElMessage.success('操作成功');
+                    loadAlarms();
+                }
+            } catch(e) {}
+        };
+
+        onMounted(() => { loadAllDevices(); loadDevices(); loadPowerData(); loadDashboard(); loadAlarms(); });
 
         return {
             currentView, currentTime, pageTitle, allDevices, handleMenuSelect,
             dashStats, deviceFilter, deviceList, deviceTotal, loadDevices,
             powerFilter, powerList, powerTotal, loadPowerData,
             statFilter, loadStatistic, loadFilter, loadDailyLoad,
-            forecastFilter, forecastData, loadForecast
+            forecastFilter, forecastData, loadForecast,
+            alarmFilter, alarmList, alarmTotal, alarmStats, handleAlarm
         };
     }
 });
