@@ -160,7 +160,7 @@
 
             <!-- ========== 负荷预测 ========== -->
             <div v-if="currentView === 'forecast'">
-                <div class="chart-card">
+                <div class="chart-card" style="margin-bottom:20px">
                     <h3>24小时负荷预测</h3>
                     <div class="filter-bar">
                         <el-select v-model="forecastFilter.deviceId" placeholder="选择设备" clearable style="width:160px">
@@ -175,7 +175,11 @@
                         <div class="stat-card"><div class="label">预测平均负荷(kW)</div><div class="value blue">{{ forecastData.avgLoad }}</div></div>
                         <div class="stat-card"><div class="label">预测用电量(kWh)</div><div class="value orange">{{ forecastData.forecastEnergy }}</div></div>
                     </div>
-                    <div id="chart-forecast" style="height:380px;margin-top:15px"></div>
+                    <div id="chart-forecast" style="height:400px;margin-top:15px"></div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-card"><h3>近7日用电量趋势</h3><div id="chart-forecast-trend" style="height:300px"></div></div>
+                    <div class="chart-card"><h3>峰谷平电量分布</h3><div id="chart-forecast-peak" style="height:300px"></div></div>
                 </div>
             </div>
 
@@ -388,13 +392,75 @@ const app = createApp({
                 const { data } = await axios.get(BASE + '/forecast', { params });
                 if (data.code === 200) {
                     forecastData.value = data.data;
+                    // 获取前一天实际负荷做对比
+                    const yesterday = new Date(forecastFilter.date);
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const yd = yesterday.toISOString().slice(0,10);
+                    let actualData = new Array(24).fill(null);
+                    try {
+                        const { data: ld } = await axios.get(BASE + '/statistic/daily-load', {
+                            params: { deviceId: forecastFilter.deviceId, date: yd }
+                        });
+                        if (ld.code === 200) {
+                            ld.data.forEach(item => {
+                                const hour = item.hourIndex;
+                                if (hour >= 0 && hour < 24) actualData[hour] = item.avgPower;
+                            });
+                        }
+                    } catch(e) {}
+
                     const chart = echarts.init(document.getElementById('chart-forecast'));
+                    const forecastLoads = (data.data.hourlyLoads || []).map(i => i.load);
                     chart.setOption({
                         tooltip: { trigger: 'axis' },
-                        xAxis: { type: 'category', data: (data.data.hourlyLoads || []).map(i => i.hour + ':00') },
+                        legend: { data: ['预测负荷', '昨日实际'] },
+                        xAxis: { type: 'category', data: Array.from({length:24}, (_,i) => i+':00') },
                         yAxis: { type: 'value', name: 'kW' },
-                        series: [{ type: 'line', data: (data.data.hourlyLoads || []).map(i => i.load), smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#F56C6C' }, markPoint: { data: [{ type: 'max', name: '最大' }, { type: 'min', name: '最小' }] } }]
+                        series: [
+                            { name: '预测负荷', type: 'line', data: forecastLoads, smooth: true, areaStyle: { opacity: 0.2 }, itemStyle: { color: '#F56C6C' }, markPoint: { data: [{ type: 'max', name: '最大' }, { type: 'min', name: '最小' }] }, markLine: { data: [{ type: 'average', name: '平均' }] } },
+                            { name: '昨日实际', type: 'line', data: actualData, smooth: true, lineStyle: { type: 'dashed' }, itemStyle: { color: '#409EFF' } }
+                        ]
                     });
+
+                    // 近7日用电量趋势
+                    const endDate = new Date();
+                    const startDate = new Date(); startDate.setDate(startDate.getDate() - 7);
+                    const fmt = d => d.toISOString().slice(0,10) + ' 00:00:00';
+                    try {
+                        const { data: se } = await axios.get(BASE + '/statistic/daily-energy', {
+                            params: { deviceId: forecastFilter.deviceId, startTime: fmt(startDate), endTime: fmt(endDate) }
+                        });
+                        if (se.code === 200) {
+                            const chart2 = echarts.init(document.getElementById('chart-forecast-trend'));
+                            chart2.setOption({
+                                tooltip: { trigger: 'axis' },
+                                xAxis: { type: 'category', data: se.data.map(i => i.period) },
+                                yAxis: { type: 'value', name: 'kWh' },
+                                series: [{ type: 'bar', data: se.data.map(i => i.totalEnergy), itemStyle: { color: '#409EFF' } }]
+                            });
+                        }
+                    } catch(e) {}
+
+                    // 峰谷平电量分布
+                    try {
+                        let peak = 0, valley = 0, flat = 0;
+                        (data.data.hourlyLoads || []).forEach(h => {
+                            const hr = h.hour;
+                            const val = parseFloat(h.load) || 0;
+                            if (hr >= 8 && hr < 11 || hr >= 18 && hr < 21) peak += val;
+                            else if (hr >= 23 || hr < 7) valley += val;
+                            else flat += val;
+                        });
+                        const chart3 = echarts.init(document.getElementById('chart-forecast-peak'));
+                        chart3.setOption({
+                            tooltip: { trigger: 'item', formatter: '{b}: {c} kWh ({d}%)' },
+                            series: [{ type: 'pie', radius: ['40%','70%'], data: [
+                                { value: peak.toFixed(2), name: '峰时(8-11/18-21时)', itemStyle: { color: '#F56C6C' } },
+                                { value: valley.toFixed(2), name: '谷时(23-7时)', itemStyle: { color: '#67C23A' } },
+                                { value: flat.toFixed(2), name: '平时(其余时段)', itemStyle: { color: '#409EFF' } }
+                            ]}]
+                        });
+                    } catch(e) {}
                 }
             } catch(e) {}
         };
