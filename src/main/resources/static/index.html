@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电力数据分析系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.4.4/dist/index.css">
+    <style>
+        body { margin: 0; font-family: 'Microsoft YaHei', sans-serif; }
+        .app-container { display: flex; min-height: 100vh; }
+        .sidebar { width: 200px; background: #304156; color: #fff; }
+        .sidebar .logo { padding: 20px; text-align: center; font-size: 18px; font-weight: bold; border-bottom: 1px solid #3a4a5e; }
+        .sidebar .el-menu { border-right: none; }
+        .main-area { flex: 1; background: #f0f2f5; }
+        .header-bar { background: #fff; padding: 15px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; }
+        .header-bar h2 { margin: 0; font-size: 18px; color: #303133; }
+        .content { padding: 20px; }
+        .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+        .stat-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .stat-card .label { font-size: 14px; color: #909399; margin-bottom: 8px; }
+        .stat-card .value { font-size: 28px; font-weight: bold; color: #303133; }
+        .stat-card .value.blue { color: #409EFF; }
+        .stat-card .value.green { color: #67C23A; }
+        .stat-card .value.orange { color: #E6A23C; }
+        .stat-card .value.red { color: #F56C6C; }
+        .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        .chart-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .chart-card h3 { margin: 0 0 15px; font-size: 16px; color: #303133; }
+        .table-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .table-card h3 { margin: 0 0 15px; font-size: 16px; color: #303133; }
+        .filter-bar { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .status-online { color: #67C23A; }
+        .status-offline { color: #F56C6C; }
+        .status-maintenance { color: #E6A23C; }
+    </style>
+</head>
+<body>
+<div id="app" class="app-container">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+        <div class="logo">⚡ 电力分析系统</div>
+        <el-menu :default-active="currentView" background-color="#304156" text-color="#bfcbd9" active-text-color="#409EFF" @select="handleMenuSelect">
+            <el-menu-item index="dashboard"><el-icon><el-icon-data-analysis/></el-icon><span>仪表盘</span></el-menu-item>
+            <el-menu-item index="device"><el-icon><el-icon-monitor/></el-icon><span>设备管理</span></el-menu-item>
+            <el-menu-item index="powerdata"><el-icon><el-icon-lightning/></el-icon><span>电力数据</span></el-menu-item>
+            <el-menu-item index="statistic"><el-icon><el-icon-pie-chart/></el-icon><span>统计分析</span></el-menu-item>
+            <el-menu-item index="forecast"><el-icon><el-icon-trend-charts/></el-icon><span>负荷预测</span></el-menu-item>
+        </el-menu>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-area">
+        <div class="header-bar">
+            <h2>{{ pageTitle }}</h2>
+            <span style="color:#909399;font-size:13px;">{{ currentTime }}</span>
+        </div>
+        <div class="content">
+
+            <!-- ========== 仪表盘 ========== -->
+            <div v-if="currentView === 'dashboard'">
+                <div class="stat-cards">
+                    <div class="stat-card"><div class="label">设备总数</div><div class="value blue">{{ dashStats.deviceCount }}</div></div>
+                    <div class="stat-card"><div class="label">在线设备</div><div class="value green">{{ dashStats.onlineCount }}</div></div>
+                    <div class="stat-card"><div class="label">今日用电量(kWh)</div><div class="value orange">{{ dashStats.todayEnergy }}</div></div>
+                    <div class="stat-card"><div class="label">待处理告警</div><div class="value red">{{ dashStats.alarmCount }}</div></div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-card"><h3>近7日用电量趋势</h3><div id="chart-dash-energy" style="height:300px"></div></div>
+                    <div class="chart-card"><h3>设备状态分布</h3><div id="chart-dash-status" style="height:300px"></div></div>
+                </div>
+            </div>
+
+            <!-- ========== 设备管理 ========== -->
+            <div v-if="currentView === 'device'">
+                <div class="table-card">
+                    <div class="filter-bar">
+                        <el-input v-model="deviceFilter.name" placeholder="设备名称" clearable style="width:160px" @clear="loadDevices" />
+                        <el-select v-model="deviceFilter.type" placeholder="设备类型" clearable style="width:140px" @change="loadDevices">
+                            <el-option label="电表" value="METER"/><el-option label="变压器" value="TRANSFORMER"/><el-option label="传感器" value="SENSOR"/>
+                        </el-select>
+                        <el-select v-model="deviceFilter.status" placeholder="状态" clearable style="width:120px" @change="loadDevices">
+                            <el-option label="在线" value="ONLINE"/><el-option label="离线" value="OFFLINE"/><el-option label="维护" value="MAINTENANCE"/>
+                        </el-select>
+                        <el-button type="primary" @click="loadDevices">查询</el-button>
+                    </div>
+                    <el-table :data="deviceList" border stripe style="width:100%">
+                        <el-table-column prop="id" label="ID" width="70"/>
+                        <el-table-column prop="name" label="设备名称" width="150"/>
+                        <el-table-column prop="type" label="类型" width="120">
+                            <template #default="{row}">{{ {METER:'电表',TRANSFORMER:'变压器',SENSOR:'传感器'}[row.type] }}</template>
+                        </el-table-column>
+                        <el-table-column prop="region" label="区域" width="100"/>
+                        <el-table-column prop="status" label="状态" width="100">
+                            <template #default="{row}"><span :class="'status-'+row.status.toLowerCase()">{{ {ONLINE:'在线',OFFLINE:'离线',MAINTENANCE:'维护'}[row.status] }}</span></template>
+                        </el-table-column>
+                        <el-table-column prop="installDate" label="安装日期" width="180"/>
+                        <el-table-column prop="createTime" label="创建时间"/>
+                    </el-table>
+                    <el-pagination style="margin-top:15px;justify-content:flex-end" background layout="total, prev, pager, next" :total="deviceTotal" :page-size="deviceFilter.size" @current-change="v => { deviceFilter.page = v; loadDevices() }"/>
+                </div>
+            </div>
+
+            <!-- ========== 电力数据 ========== -->
+            <div v-if="currentView === 'powerdata'">
+                <div class="table-card">
+                    <div class="filter-bar">
+                        <el-select v-model="powerFilter.deviceId" placeholder="选择设备" clearable style="width:160px" @change="loadPowerData">
+                            <el-option v-for="d in allDevices" :key="d.id" :label="d.name" :value="d.id"/>
+                        </el-select>
+                        <el-button type="primary" @click="loadPowerData">查询</el-button>
+                    </div>
+                    <el-table :data="powerList" border stripe style="width:100%">
+                        <el-table-column prop="id" label="ID" width="70"/>
+                        <el-table-column prop="deviceId" label="设备ID" width="80"/>
+                        <el-table-column prop="voltage" label="电压(V)" width="100"/>
+                        <el-table-column prop="current" label="电流(A)" width="100"/>
+                        <el-table-column prop="power" label="功率(kW)" width="100"/>
+                        <el-table-column prop="energy" label="电量(kWh)" width="110"/>
+                        <el-table-column prop="powerFactor" label="功率因数" width="100"/>
+                        <el-table-column prop="collectTime" label="采集时间"/>
+                    </el-table>
+                    <el-pagination style="margin-top:15px;justify-content:flex-end" background layout="total, prev, pager, next" :total="powerTotal" :page-size="powerFilter.size" @current-change="v => { powerFilter.page = v; loadPowerData() }"/>
+                </div>
+            </div>
+
+            <!-- ========== 统计分析 ========== -->
+            <div v-if="currentView === 'statistic'">
+                <div class="chart-card" style="margin-bottom:20px">
+                    <h3>用电量统计</h3>
+                    <div class="filter-bar">
+                        <el-select v-model="statFilter.deviceId" placeholder="选择设备" clearable style="width:160px">
+                            <el-option v-for="d in allDevices" :key="d.id" :label="d.name" :value="d.id"/>
+                        </el-select>
+                        <el-radio-group v-model="statFilter.period">
+                            <el-radio-button label="daily">按日</el-radio-button>
+                            <el-radio-button label="monthly">按月</el-radio-button>
+                        </el-radio-group>
+                        <el-button type="primary" @click="loadStatistic">查询</el-button>
+                    </div>
+                    <div id="chart-stat-energy" style="height:350px"></div>
+                </div>
+                <div class="chart-card">
+                    <h3>日负荷曲线</h3>
+                    <div class="filter-bar">
+                        <el-select v-model="loadFilter.deviceId" placeholder="选择设备" clearable style="width:160px">
+                            <el-option v-for="d in allDevices" :key="d.id" :label="d.name" :value="d.id"/>
+                        </el-select>
+                        <el-button type="primary" @click="loadDailyLoad">查询</el-button>
+                    </div>
+                    <div id="chart-stat-load" style="height:350px"></div>
+                </div>
+            </div>
+
+            <!-- ========== 负荷预测 ========== -->
+            <div v-if="currentView === 'forecast'">
+                <div class="chart-card">
+                    <h3>24小时负荷预测</h3>
+                    <div class="filter-bar">
+                        <el-select v-model="forecastFilter.deviceId" placeholder="选择设备" clearable style="width:160px">
+                            <el-option v-for="d in allDevices" :key="d.id" :label="d.name" :value="d.id"/>
+                        </el-select>
+                        <el-date-picker v-model="forecastFilter.date" type="date" placeholder="预测日期" value-format="YYYY-MM-DD"/>
+                        <el-button type="primary" @click="loadForecast">预测</el-button>
+                    </div>
+                    <div class="stat-cards" v-if="forecastData.maxLoad" style="margin-top:15px">
+                        <div class="stat-card"><div class="label">预测最大负荷(kW)</div><div class="value red">{{ forecastData.maxLoad }}</div></div>
+                        <div class="stat-card"><div class="label">预测最小负荷(kW)</div><div class="value green">{{ forecastData.minLoad }}</div></div>
+                        <div class="stat-card"><div class="label">预测平均负荷(kW)</div><div class="value blue">{{ forecastData.avgLoad }}</div></div>
+                        <div class="stat-card"><div class="label">预测用电量(kWh)</div><div class="value orange">{{ forecastData.forecastEnergy }}</div></div>
+                    </div>
+                    <div id="chart-forecast" style="height:380px;margin-top:15px"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/element-plus@2.4.4/dist/index.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios@1.6.5/dist/axios.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+const { createApp, ref, reactive, computed, onMounted, watch, nextTick } = Vue;
+const BASE = '/api';
+
+const app = createApp({
+    setup() {
+        const currentView = ref('dashboard');
+        const currentTime = ref(new Date().toLocaleString('zh-CN'));
+        setInterval(() => { currentTime.value = new Date().toLocaleString('zh-CN'); }, 1000);
+
+        const pageTitle = computed(() => ({
+            dashboard: '仪表盘', device: '设备管理', powerdata: '电力数据', statistic: '统计分析', forecast: '负荷预测'
+        }[currentView.value]));
+
+        // ---- 通用 ----
+        const allDevices = ref([]);
+        const loadAllDevices = async () => {
+            const { data } = await axios.get(BASE + '/device/list', { params: { page: 1, size: 100 } });
+            if (data.code === 200) allDevices.value = data.data.records;
+        };
+
+        const handleMenuSelect = (index) => {
+            currentView.value = index;
+            nextTick(() => {
+                if (index === 'dashboard') loadDashboard();
+                if (index === 'statistic') { loadStatistic(); loadDailyLoad(); }
+            });
+        };
+
+        // ---- 仪表盘 ----
+        const dashStats = reactive({ deviceCount: 0, onlineCount: 0, todayEnergy: '0.00', alarmCount: 0 });
+        const loadDashboard = async () => {
+            const { data: dd } = await axios.get(BASE + '/device/list', { params: { page: 1, size: 1 } });
+            if (dd.code === 200) dashStats.deviceCount = dd.data.total;
+            const { data: do2 } = await axios.get(BASE + '/device/list', { params: { status: 'ONLINE', page: 1, size: 1 } });
+            if (do2.code === 200) dashStats.onlineCount = do2.data.total;
+            const { data: de } = await axios.get(BASE + '/power-data/list', { params: { page: 1, size: 1 } });
+            if (de.code === 200) {
+                const records = de.data.records;
+                let total = 0;
+                records.forEach(r => { if (r.energy) total += parseFloat(r.energy); });
+                dashStats.todayEnergy = total.toFixed(2);
+            }
+            // 用电量趋势图
+            const endDate = new Date();
+            const startDate = new Date(); startDate.setDate(startDate.getDate() - 7);
+            const fmt = d => d.toISOString().slice(0,10) + ' 00:00:00';
+            try {
+                const { data: se } = await axios.get(BASE + '/statistic/daily-energy', {
+                    params: { startTime: fmt(startDate), endTime: fmt(endDate) }
+                });
+                if (se.code === 200 && se.data.length > 0) {
+                    const chart = echarts.init(document.getElementById('chart-dash-energy'));
+                    chart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: se.data.map(i => i.period) },
+                        yAxis: { type: 'value', name: 'kWh' },
+                        series: [{ type: 'line', data: se.data.map(i => i.totalEnergy), smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#409EFF' } }]
+                    });
+                }
+            } catch(e) {}
+            // 设备状态饼图
+            try {
+                const chart2 = echarts.init(document.getElementById('chart-dash-status'));
+                chart2.setOption({
+                    tooltip: { trigger: 'item' },
+                    series: [{ type: 'pie', radius: ['40%','70%'], data: [
+                        { value: dashStats.onlineCount, name: '在线', itemStyle: { color: '#67C23A' } },
+                        { value: Math.max(0, dashStats.deviceCount - dashStats.onlineCount), name: '离线/维护', itemStyle: { color: '#E6A23C' } }
+                    ]}]
+                });
+            } catch(e) {}
+        };
+
+        // ---- 设备管理 ----
+        const deviceFilter = reactive({ name: '', type: '', status: '', page: 1, size: 20 });
+        const deviceList = ref([]);
+        const deviceTotal = ref(0);
+        const loadDevices = async () => {
+            const params = { page: deviceFilter.page, size: deviceFilter.size };
+            if (deviceFilter.name) params.name = deviceFilter.name;
+            if (deviceFilter.type) params.type = deviceFilter.type;
+            if (deviceFilter.status) params.status = deviceFilter.status;
+            const { data } = await axios.get(BASE + '/device/list', { params });
+            if (data.code === 200) { deviceList.value = data.data.records; deviceTotal.value = data.data.total; }
+        };
+
+        // ---- 电力数据 ----
+        const powerFilter = reactive({ deviceId: null, page: 1, size: 20 });
+        const powerList = ref([]);
+        const powerTotal = ref(0);
+        const loadPowerData = async () => {
+            const params = { page: powerFilter.page, size: powerFilter.size };
+            if (powerFilter.deviceId) params.deviceId = powerFilter.deviceId;
+            const { data } = await axios.get(BASE + '/power-data/list', { params });
+            if (data.code === 200) { powerList.value = data.data.records; powerTotal.value = data.data.total; }
+        };
+
+        // ---- 统计分析 ----
+        const statFilter = reactive({ deviceId: null, period: 'daily' });
+        const loadStatistic = async () => {
+            const endDate = new Date();
+            const startDate = new Date(); startDate.setDate(startDate.getDate() - 30);
+            const fmt = d => d.toISOString().slice(0,10) + ' 00:00:00';
+            const params = { startTime: fmt(startDate), endTime: fmt(endDate) };
+            if (statFilter.deviceId) params.deviceId = statFilter.deviceId;
+            const url = statFilter.period === 'daily' ? '/statistic/daily-energy' : '/statistic/monthly-energy';
+            try {
+                const { data } = await axios.get(BASE + url, { params });
+                if (data.code === 200) {
+                    const chart = echarts.init(document.getElementById('chart-stat-energy'));
+                    chart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: data.data.map(i => i.period) },
+                        yAxis: { type: 'value', name: 'kWh' },
+                        series: [{ type: 'bar', data: data.data.map(i => i.totalEnergy), itemStyle: { color: '#409EFF' } }]
+                    });
+                }
+            } catch(e) {}
+        };
+
+        const loadFilter = reactive({ deviceId: null });
+        const loadDailyLoad = async () => {
+            const params = { date: new Date().toISOString().slice(0,10) };
+            if (loadFilter.deviceId) params.deviceId = loadFilter.deviceId;
+            try {
+                const { data } = await axios.get(BASE + '/statistic/daily-load', { params });
+                if (data.code === 200) {
+                    const chart = echarts.init(document.getElementById('chart-stat-load'));
+                    chart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: data.data.map(i => i.period + ':00') },
+                        yAxis: { type: 'value', name: 'kW' },
+                        series: [{ type: 'line', data: data.data.map(i => i.avgPower), smooth: true, areaStyle: { opacity: 0.2 }, itemStyle: { color: '#E6A23C' } }]
+                    });
+                }
+            } catch(e) {}
+        };
+
+        // ---- 负荷预测 ----
+        const forecastFilter = reactive({ deviceId: null, date: new Date().toISOString().slice(0,10) });
+        const forecastData = ref({});
+        const loadForecast = async () => {
+            const params = { targetDate: forecastFilter.date };
+            if (forecastFilter.deviceId) params.deviceId = forecastFilter.deviceId;
+            try {
+                const { data } = await axios.get(BASE + '/forecast', { params });
+                if (data.code === 200) {
+                    forecastData.value = data.data;
+                    const chart = echarts.init(document.getElementById('chart-forecast'));
+                    chart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: (data.data.hourlyLoads || []).map(i => i.hour + ':00') },
+                        yAxis: { type: 'value', name: 'kW' },
+                        series: [{ type: 'line', data: (data.data.hourlyLoads || []).map(i => i.load), smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#F56C6C' }, markPoint: { data: [{ type: 'max', name: '最大' }, { type: 'min', name: '最小' }] } }]
+                    });
+                }
+            } catch(e) {}
+        };
+
+        onMounted(() => { loadAllDevices(); loadDevices(); loadPowerData(); loadDashboard(); });
+
+        return {
+            currentView, currentTime, pageTitle, allDevices, handleMenuSelect,
+            dashStats, deviceFilter, deviceList, deviceTotal, loadDevices,
+            powerFilter, powerList, powerTotal, loadPowerData,
+            statFilter, loadStatistic, loadFilter, loadDailyLoad,
+            forecastFilter, forecastData, loadForecast
+        };
+    }
+});
+app.use(ElementPlus);
+app.mount('#app');
+</script>
+</body>
+</html>
