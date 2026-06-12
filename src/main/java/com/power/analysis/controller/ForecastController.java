@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Api(tags = "负荷预测")
@@ -23,7 +24,7 @@ public class ForecastController {
     @GetMapping
     public Result<ForecastDTO> forecast(
             @RequestParam(required = false) Long deviceId,
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDateTime targetDate) {
-        return Result.success(forecastService.forecast(deviceId, targetDate));
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate targetDate) {
+        return Result.success(forecastService.forecast(deviceId, targetDate.atStartOfDay()));
     }
 }

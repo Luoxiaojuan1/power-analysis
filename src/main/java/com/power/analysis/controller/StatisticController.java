@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -42,7 +43,7 @@ public class StatisticController {
     @GetMapping("/daily-load")
     public Result<List<StatisticDTO>> dailyLoad(
             @RequestParam(required = false) Long deviceId,
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDateTime date) {
-        return Result.success(statisticService.dailyLoad(deviceId, date));
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+        return Result.success(statisticService.dailyLoad(deviceId, date.atStartOfDay()));
     }
 }
