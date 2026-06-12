@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 
 @Api(tags = "负荷预测")
 @RestController
-@RequestMapping("/forecast")
+@RequestMapping("/api/forecast")
 @RequiredArgsConstructor
 public class ForecastController {
 

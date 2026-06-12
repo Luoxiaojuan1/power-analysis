@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Api(tags = "告警管理")
 @RestController
-@RequestMapping("/alarm")
+@RequestMapping("/api/alarm")
 @RequiredArgsConstructor
 public class AlarmRecordController {
 

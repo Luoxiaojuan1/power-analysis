@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Api(tags = "设备管理")
 @RestController
-@RequestMapping("/device")
+@RequestMapping("/api/device")
 @RequiredArgsConstructor
 public class DeviceController {
 

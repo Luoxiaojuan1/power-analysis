@@ -13,7 +13,7 @@ import java.util.List;
 
 @Api(tags = "电力数据采集")
 @RestController
-@RequestMapping("/power-data")
+@RequestMapping("/api/power-data")
 @RequiredArgsConstructor
 public class PowerDataController {
 

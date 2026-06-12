@@ -279,13 +279,18 @@ const app = createApp({
             if (dd.code === 200) dashStats.deviceCount = dd.data.total;
             const { data: do2 } = await axios.get(BASE + '/device/list', { params: { status: 'ONLINE', page: 1, size: 1 } });
             if (do2.code === 200) dashStats.onlineCount = do2.data.total;
-            const { data: de } = await axios.get(BASE + '/power-data/list', { params: { page: 1, size: 1 } });
-            if (de.code === 200) {
-                const records = de.data.records;
-                let total = 0;
-                records.forEach(r => { if (r.energy) total += parseFloat(r.energy); });
-                dashStats.todayEnergy = total.toFixed(2);
-            }
+            // 用今日日期取当日总用电量
+            const todayStr = new Date().toISOString().slice(0,10) + ' 00:00:00';
+            const todayEnd = new Date().toISOString().slice(0,10) + ' 23:59:59';
+            try {
+                const { data: te } = await axios.get(BASE + '/statistic/daily-energy', { params: { startTime: todayStr, endTime: todayEnd } });
+                if (te.code === 200 && te.data.length > 0) {
+                    const todayData = te.data.find(d => d.period === new Date().toISOString().slice(0,10));
+                    if (todayData) dashStats.todayEnergy = parseFloat(todayData.totalEnergy).toFixed(2);
+                }
+            } catch(e) {}
+            const { data: da } = await axios.get(BASE + '/alarm/list', { params: { page: 1, size: 1 } });
+            if (da.code === 200) dashStats.alarmCount = da.data.total;
             // 用电量趋势图
             const endDate = new Date();
             const startDate = new Date(); startDate.setDate(startDate.getDate() - 7);
@@ -374,7 +379,7 @@ const app = createApp({
                     const chart = echarts.init(document.getElementById('chart-stat-load'));
                     chart.setOption({
                         tooltip: { trigger: 'axis' },
-                        xAxis: { type: 'category', data: data.data.map(i => i.period + ':00') },
+                        xAxis: { type: 'category', data: data.data.map(i => i.hourIndex + ':00') },
                         yAxis: { type: 'value', name: 'kW' },
                         series: [{ type: 'line', data: data.data.map(i => i.avgPower), smooth: true, areaStyle: { opacity: 0.2 }, itemStyle: { color: '#E6A23C' } }]
                     });

@@ -15,7 +15,7 @@ import java.util.List;
 
 @Api(tags = "统计分析")
 @RestController
-@RequestMapping("/statistic")
+@RequestMapping("/api/statistic")
 @RequiredArgsConstructor
 public class StatisticController {
 
